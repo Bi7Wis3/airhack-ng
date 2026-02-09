@@ -233,6 +233,20 @@ sudo ./airhack-ng-v3 -a wlan0 --disable_monitor
 5. **Deauth client** → `-i -5` (forces handshake)
 6. **Dictionary attack** → `-i -4 --dict wordlist.txt`
 
+### WPA3 Attack Flow (PMKID - Clientless)
+1. **Enable monitor mode** → `-em`
+2. **Scan for target** → `--scan`
+3. **Save configuration** → `-e -a -c -b -g --save`
+4. **Capture PMKID** → `-i -7` (no client needed!)
+5. **Dictionary attack** → `-i -4 --dict wordlist.txt`
+
+### WPA3 Attack Flow (SAE Handshake)
+1. **Enable monitor mode** → `-em`
+2. **Scan for target** → `--scan`
+3. **Save configuration** → `-e -a -c -b -s -g --save`
+4. **Capture handshake** → `-i -k -8`
+5. **Dictionary attack** → `-i -4 --dict wordlist.txt`
+
 ## Troubleshooting
 
 ### Monitor mode won't enable
