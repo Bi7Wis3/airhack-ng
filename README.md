@@ -11,7 +11,7 @@
 
 ## Version History
 
-### v1.0 (January 2010)
+### v1.0 (December 2009)
 - Original WEP cracking wrapper
 - Basic functionality for fake auth, IV capture, ARP replay
 - KDE Konsole integration
