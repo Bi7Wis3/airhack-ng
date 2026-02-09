@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.1] - 2026-02-09
+
+### WPA3 Support Release
+
+#### Added
+- ✅ **WPA3 PMKID attack** (clientless, flag -7)
+- ✅ **WPA3-SAE handshake capture** (flag -8)
+- ✅ **hcxdumptool integration** for WPA3 PMKID attacks
+- ✅ **hcxtools integration** for hash conversion
+- ✅ **hashcat support** for WPA3 cracking (mode 22000)
+- ✅ **WPA3_GUIDE.md** - Comprehensive WPA3 attack documentation
+- ✅ **Auto-detection** of WPA3 vs WPA2 captures
+- ✅ **Automatic hash conversion** from pcapng to hashcat format
+- ✅ **Fallback methods** when WPA3 tools unavailable
+
+#### Changed
+- 🔧 Dictionary attack now auto-detects WPA3 hashes
+- 🔧 Installer offers WPA3 tools (hcxdumptool, hcxtools, hashcat)
+- 🔧 Help text updated with WPA3 examples
+
 ## [3.0] - 2026-02-09
 
 ### Major Modernization Release
