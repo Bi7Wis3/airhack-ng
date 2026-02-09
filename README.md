@@ -198,9 +198,11 @@ sudo ./airhack-ng-v3 -a wlan0 --disable_monitor
 | `-1` | Fake authentication (WEP) |
 | `-2` | Capture IVs/packets to file |
 | `-3` | ARP replay attack |
-| `-4` | Dictionary attack (WPA/WPA2) |
+| `-4` | Dictionary attack (WPA/WPA2/WPA3) |
 | `-5` | Capture WPA handshake (deauth) |
 | `-6` | Deauth attack (MDOS) |
+| `-7` | WPA3 PMKID attack (clientless) |
+| `-8` | WPA3-SAE handshake capture |
 | `--get_key` | Extract key from capture |
 
 ### Options
