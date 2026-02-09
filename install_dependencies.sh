@@ -94,6 +94,11 @@ case $PKG_MANAGER in
             "wireless-tools"
             "net-tools"
         )
+        WPA3_PACKAGES=(
+            "hcxdumptool"
+            "hcxtools"
+            "hashcat"
+        )
         OPTIONAL_PACKAGES=(
             "wordlists"
             "konsole"
@@ -200,6 +205,26 @@ for tool in "${NETWORK_TOOLS[@]}"; do
         echo -e "${RED}[✗]${NC} $tool - NOT FOUND"
     fi
 done
+
+echo
+
+# Ask about WPA3 tools
+echo -e "${BLUE}[*] WPA3 Attack Tools (hcxdumptool, hcxtools, hashcat):${NC}"
+echo -e "  ${GREEN}Enable WPA3 PMKID attacks and advanced cracking${NC}"
+read -p "Install WPA3 tools? [Y/n]: " INSTALL_WPA3
+INSTALL_WPA3=${INSTALL_WPA3:-Y}
+
+if [[ "$INSTALL_WPA3" == "Y" || "$INSTALL_WPA3" == "y" ]]; then
+    echo -e "\n${BLUE}[*] Installing WPA3 attack tools...${NC}"
+    for package in "${WPA3_PACKAGES[@]}"; do
+        echo -e "${YELLOW}[*] Installing: $package${NC}"
+        if $INSTALL_CMD "$package" &> /tmp/install_log_$package.txt; then
+            echo -e "${GREEN}[✓] Installed: $package${NC}"
+        else
+            echo -e "${YELLOW}[!] Failed: $package (may not be available in repos)${NC}"
+        fi
+    done
+fi
 
 echo
 

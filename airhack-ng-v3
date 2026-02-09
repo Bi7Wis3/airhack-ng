@@ -38,6 +38,8 @@ GET_KEY=0
 DICTIONARY_ATTACK=0
 MDOS_ATTACK=0
 WPA_HANDSHAKE=0
+WPA3_PMKID=0
+WPA3_HANDSHAKE=0
 
 ## Network Parameters ##
 ADAPTER=""
@@ -49,6 +51,7 @@ CLIENT_MAC=""
 KEY=""
 DICTIONARY=""
 MON_INTERFACE=""
+ENCRYPTION_TYPE=""
 
 ## Terminal Emulator ##
 TERMINAL_CMD=""
@@ -202,6 +205,8 @@ function get_params() {
             -4) DICTIONARY_ATTACK=1 ;;
             -5) WPA_HANDSHAKE=1 ;;
             -6) MDOS_ATTACK=1 ;;
+            -7) WPA3_PMKID=1 ;;
+            -8) WPA3_HANDSHAKE=1 ;;
             -i)
                 if [ -z "$ESSID" ]; then
                     ERROR_CHOICE=1
@@ -281,6 +286,8 @@ ${GREEN}Actions:${NC}
   -4                   Dictionary attack (WPA/WPA2)
   -5                   Capture WPA handshake
   -6                   Deauth attack (MDOS)
+  -7                   WPA3 PMKID attack (clientless)
+  -8                   WPA3 handshake capture
   --get_key            Extract key from capture file
 
 ${GREEN}Options:${NC}
@@ -307,6 +314,15 @@ ${BLUE}WPA/WPA2 Attack:${NC}
   sudo $SCRIPT_NAME -e "TargetNet" -a wlan0 -c 6 -b AA:BB:CC:DD:EE:FF -s 11:22:33:44:55:66 -g --save
   sudo $SCRIPT_NAME -e "TargetNet" -i -k -2 -5
   sudo $SCRIPT_NAME -e "TargetNet" -i -4 --dict /path/to/wordlist.txt
+
+${BLUE}WPA3 Attack (PMKID - No client needed):${NC}
+  sudo $SCRIPT_NAME -e "TargetWPA3" -a wlan0 -c 6 -b AA:BB:CC:DD:EE:FF -g --save
+  sudo $SCRIPT_NAME -e "TargetWPA3" -i -7
+  sudo $SCRIPT_NAME -e "TargetWPA3" -i -4 --dict /path/to/wordlist.txt
+
+${BLUE}WPA3 Attack (SAE Handshake):${NC}
+  sudo $SCRIPT_NAME -e "TargetWPA3" -i -k -8
+  sudo $SCRIPT_NAME -e "TargetWPA3" -i -4 --dict /path/to/wordlist.txt
 
 EOF
     exit 0
