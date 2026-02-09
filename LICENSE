@@ -1,0 +1,48 @@
+MIT License
+
+Copyright (c) 2009-2010 Bitwise Operator (Original v1.0, v2.0)
+Copyright (c) 2026 (v3.0 Modernization)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+IMPORTANT LEGAL NOTICE:
+
+This software is designed for AUTHORIZED SECURITY TESTING ONLY.
+
+Users of this software must comply with all applicable local, state, national,
+and international laws. The authors and contributors assume no liability and
+are not responsible for any misuse or damage caused by this software.
+
+By using this software, you agree to use it only for:
+1. Testing networks you own
+2. Testing networks where you have explicit written permission
+3. Educational purposes in controlled environments
+4. Legitimate penetration testing engagements with proper authorization
+
+Unauthorized access to computer networks is illegal under laws including but
+not limited to:
+- Computer Fraud and Abuse Act (CFAA) - United States
+- Computer Misuse Act - United Kingdom
+- EU Directive 2013/40/EU - European Union
+- Similar laws in other jurisdictions worldwide
+
+The authors explicitly disclaim any responsibility for illegal use of this
+software. Use at your own risk and only where legally authorized.

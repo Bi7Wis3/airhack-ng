@@ -1,0 +1,95 @@
+# AirHack-ng .gitignore
+
+# Wordlists (too large for git)
+*.txt
+wordlists/
+*.lst
+*.dict
+
+# Capture files
+*.cap
+*.ivs
+*.csv
+*.kismet
+*.pcap
+*.pcapng
+
+# Network configuration files (may contain sensitive data)
+*.net
+
+# Log files
+*.log
+*.out
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.*.swp
+.*.swo
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-*
+.eclipse/
+
+# Python bytecode (if we add Python scripts later)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# airhack-ng specific
+airhack-ng/        # Working directory with captures
+output/
+captures/
+dumps/
+sessions/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Compressed files (except documentation)
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Documentation build artifacts
+docs/_build/
+site/
+
+# Local configuration
+.env
+.env.local
+config.local
+
+# Downloaded dependencies
+downloads/
+tmp/

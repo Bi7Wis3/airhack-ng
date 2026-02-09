@@ -1,0 +1,26 @@
+name: ShellCheck
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  shellcheck:
+    name: ShellCheck Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Run ShellCheck
+      uses: ludeeus/action-shellcheck@master
+      with:
+        severity: warning
+        ignore_paths: |
+          airhack-ng-v1
+          airhack-ng-v2
+      env:
+        SHELLCHECK_OPTS: -e SC2034 -e SC2181
